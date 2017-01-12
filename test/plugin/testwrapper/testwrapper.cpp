@@ -175,7 +175,7 @@ restart()
 done:
   if (currMode == RECORD) {
     logFile = fopen(filename.c_str(), "w");
-  } else if (currMode = REPLAY) {
+  } else if (currMode == REPLAY) {
     logFile = fopen(filename.c_str(), "r");
   } else {
     logFile = NULL;
