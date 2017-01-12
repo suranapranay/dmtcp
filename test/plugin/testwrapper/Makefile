@@ -15,8 +15,8 @@ ifndef DMTCP_ROOT
 endif
 DMTCP_INCLUDE=${DMTCP_ROOT}/include
 
-override CFLAGS += -fPIC -I${DMTCP_INCLUDE}
-override CXXFLAGS += -fPIC -I${DMTCP_INCLUDE} -I${DMTCP_ROOT}/jalib
+override CFLAGS += -fPIC -I${DMTCP_INCLUDE} -g3 -O0
+override CXXFLAGS += -fPIC -I${DMTCP_INCLUDE} -I${DMTCP_ROOT}/jalib -g3 -O0
 LINK = ${CC}
 
 DEMO_PORT=7781
