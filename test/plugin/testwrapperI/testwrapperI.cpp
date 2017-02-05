@@ -149,6 +149,7 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
     status = &(mpiSign.status);
     result = mpiSign.result;
     goto done;
+
   }
 
   result = NEXT_FNC(MPI_Wait)(request, status);
