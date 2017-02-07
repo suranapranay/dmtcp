@@ -24,6 +24,27 @@
 #define MPIIRECV            1
 #define MPIWAIT             2
 
+
+static inline size_t
+getMpiDtSize(MPI_Datatype dt)
+{
+  uint8_t ret = 1;
+  switch (dt) {
+    case MPI_LONG:
+    case MPI_UNSIGNED_LONG:
+    case MPI_LONG_LONG:
+    case MPI_DOUBLE: ret = 8; break;
+    case MPI_UNSIGNED:
+    case MPI_FLOAT:
+    case MPI_INT: ret = 4; break;
+    case MPI_UNSIGNED_CHAR:
+    case MPI_CHAR:
+    case MPI_BYTE: ret = 1; break;
+    default: break;
+  }
+  return ret;
+}
+
 struct _MPIIrecvSignature{
  int count;
  MPI_Datatype mDtype;
@@ -82,23 +103,29 @@ errCheckGetRestartEnv(int ret)
 static void
 recordData(MPI_UIRecvWait &mpiRecvWait)
 {
+  JNOTE("Start Recording");
   JASSERT(logFile);
   JASSERT(currMode == RECORD);
   int callType = mpiRecvWait.callType;
   int sz;
   int datasz;
   if(callType == MPIIRECV){
+      JNOTE("beginning irecv record");
       sz = sizeof(MPI_IRecvCallSign);
-      MPI_IRecvCallSign mpiIRecvData = *(MPI_IRecvCallSign*) mpiRecvWait.callbuffer;
-      datasz = mpiIRecvData.count * mpiIRecvData.mDtype;
+      MPI_IRecvCallSign* mpiIRecvData = (MPI_IRecvCallSign*) mpiRecvWait.callbuffer;
+      JNOTE("pointer set");
+      datasz = mpiIRecvData -> count * getMpiDtSize(mpiIRecvData -> mDtype);
+      JNOTE("setup data");
       fwrite(&mpiRecvWait, sizeof(MPI_UIRecvWait), 1, logFile);
       fwrite(mpiRecvWait.callbuffer, sz, 1, logFile);
-      fwrite(mpiIRecvData.buffer, datasz, 1, logFile);
+      fwrite(mpiIRecvData -> buffer, datasz, 1, logFile);
+      JNOTE("DONE RECORDING RECV");
   }
   else{
       fwrite(&mpiRecvWait, sizeof(MPI_UIRecvWait), 1, logFile);
       fwrite(mpiRecvWait.callbuffer, sizeof(MPI_WaitSign), 1, logFile);
-  }
+      JNOTE("RECORDING wait");
+}
 
   JTRACE("Recorded data");
 }
@@ -119,8 +146,8 @@ static void replayData(MPI_UIRecvWait& _replayData)
   else{
     MPI_IRecvCallSign *irecv = new MPI_IRecvCallSign();
     fread(irecv, sizeof(MPI_IRecvCallSign), 1, logFile);
-    irecv -> buffer = (char*)malloc(sizeof(irecv -> mDtype) * irecv -> count);
-    fread(irecv -> buffer, sizeof(irecv -> mDtype) * irecv -> count, 1, logFile);
+    irecv -> buffer = (char*)malloc(getMpiDtSize(irecv -> mDtype) * irecv -> count);
+    fread(irecv -> buffer, getMpiDtSize(irecv -> mDtype) * irecv -> count, 1, logFile);
     _replayData.callbuffer = irecv;
   }
   return;
@@ -130,11 +157,14 @@ static void replayData(MPI_UIRecvWait& _replayData)
 int MPI_Wait(MPI_Request *request, MPI_Status *status)
 {
   int result = 0;
+  MPI_WaitSign mpiWait;
+  mpiWait.request = *request;
+  mpiWait.status = *status;
   if (currMode == RECORD) {
     result = NEXT_FNC(MPI_Wait)(request, status);
     MPI_UIRecvWait commonDt = {
         .callType = MPIWAIT,
-        .callbuffer = NULL
+        .callbuffer = &mpiWait
     };
 
     recordData(commonDt);
@@ -145,8 +175,8 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
     commonDt.callType = MPIWAIT;
     replayData(commonDt);
     MPI_WaitSign mpiSign = *(MPI_WaitSign*)(commonDt.callbuffer);
-    request = &(mpiSign.request);
-    status = &(mpiSign.status);
+    *request = (mpiSign.request);
+    *status = (mpiSign.status);
     result = mpiSign.result;
     goto done;
 
@@ -162,6 +192,7 @@ done:
 int MPI_Irecv(void *buf, int count, MPI_Datatype datatype,
                 int source, int tag, MPI_Comm comm, MPI_Request *request)
 {
+  JNOTE("inside Recv");
   int result = 0;
   if (currMode == RECORD) {
     result = NEXT_FNC(MPI_Irecv)(buf, count, datatype, source, tag, comm, request);
@@ -176,18 +207,20 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype,
 
     MPI_UIRecvWait commonDt = {
         .callType = MPIIRECV,
-        .callbuffer = NULL
+        .callbuffer = &mpiSign
     };
-
+  JNOTE("begin recording WAIT");
     recordData(commonDt);
+  JNOTE("done recording WAIT");
     goto done;
   } else if (currMode == REPLAY) {
     MPI_UIRecvWait commonDt = {0};
     commonDt.callType = MPIIRECV;
     replayData(commonDt);
     MPI_IRecvCallSign *mpiSign = (MPI_IRecvCallSign*)(commonDt.callbuffer);
-    buf = mpiSign -> buffer;
-    *request = mpiSign -> request;
+    memcpy(buf, mpiSign -> buffer, mpiSign -> count * getMpiDtSize(datatype)) ;
+    free(mpiSign -> buffer);
+    memcpy(request, &(mpiSign -> request), sizeof(MPI_Request));
     result = mpiSign -> result;
     goto done;
   }
