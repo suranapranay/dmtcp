@@ -15,8 +15,8 @@ ifndef DMTCP_ROOT
 endif
 DMTCP_INCLUDE=${DMTCP_ROOT}/include
 
-override CFLAGS += -fPIC -I${DMTCP_INCLUDE} -g3 -O0
-override CXXFLAGS += -fPIC -I${DMTCP_INCLUDE} -I${DMTCP_ROOT}/jalib -g3 -O0
+override CFLAGS += -fPIC -I${DMTCP_INCLUDE} -I/usr/include/mpich -g3 -O0
+override CXXFLAGS += -fPIC -I${DMTCP_INCLUDE} -I${DMTCP_ROOT}/jalib -I/usr/include/mpich -g3 -O0
 LINK = ${CC}
 
 DEMO_PORT=7781
@@ -26,15 +26,15 @@ default: ${LIBNAME}.so
 ${DMTCP_ROOT}/test/dmtcp1: ${DMTCP_ROOT}/test
 	cd ${DMTCP_ROOT}/test; make dmtcp1
 
-tests/grid1: tests/grid1.c
+tests/simpleIrecv: tests/simpleIrecv.c
 	cd tests; make
 
-check: ${LIBNAME}.so tests/grid1
+check: ${LIBNAME}.so tests/simpleIrecv
 	# Kill an old coordinator on this port if present, just in case.
 	@ ${DMTCP_ROOT}/bin/dmtcp_command --quit --quiet \
 	  --coord-port ${DEMO_PORT} 2>/dev/null || true
 	@ ${DMTCP_ROOT}/bin/dmtcp_coordinator --quiet --daemon --port ${DEMO_PORT}
-	${DMTCP_ROOT}/bin/dmtcp_launch -j -p ${DEMO_PORT} --with-plugin $$PWD/${LIBNAME}.so  mpirun -n 2 -hosts localhost tests/grid1 2 5 10 &
+	${DMTCP_ROOT}/bin/dmtcp_launch -j -p ${DEMO_PORT} --with-plugin $$PWD/${LIBNAME}.so  mpirun -n 2 -hosts localhost tests/simpleIrecv &
 	@ sleep 3
 	# Checkpoint
 	@ ${DMTCP_ROOT}/bin/dmtcp_command -p ${DEMO_PORT} -c
@@ -57,7 +57,7 @@ ${LIBNAME}.so: ${LIBOBJS}
 	${CXX} ${CXXFLAGS} -c -o $@ $<
 
 tidy:
-	rm -f *~ .*.swp dmtcp_restart_script*.sh ckpt_*.dmtcp
+	rm -f *~ .*.swp dmtcp_restart_script*.sh ckpt_*.dmtcp *.log
 
 clean: tidy
 	rm -f ${LIBOBJS} ${LIBNAME}.so

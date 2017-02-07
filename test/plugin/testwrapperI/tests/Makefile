@@ -1,4 +1,4 @@
-FILE=grid1
+FILE=simpleIrecv
 default: build
 
 $(FILE).o: $(FILE).c
